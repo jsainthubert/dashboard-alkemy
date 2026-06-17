@@ -19,8 +19,14 @@ header.top{background:linear-gradient(120deg,#1A2B49 0%,#2E6A9E 55%,#4987BE 100%
 header.top h1{margin:0;font-size:23px;font-weight:800;letter-spacing:.3px}
 header.top p{margin:5px 0 0;opacity:.85;font-size:13px;font-weight:400}
 .wrap{padding:20px 30px 60px;max-width:1500px;margin:0 auto}
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:18px}
-.kpi{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:12px 14px;backdrop-filter:blur(4px)}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:18px}
+.kpi{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:11px 13px;backdrop-filter:blur(4px)}
+.kpi.click{cursor:pointer;transition:background .15s,transform .1s}
+.kpi.click:hover{background:rgba(255,255,255,.24)}
+.kpi.click:active{transform:scale(.98)}
+.kpi.on{background:#fff;border-color:#fff}
+.kpi.on .lbl,.kpi.on .sub{color:var(--navy);opacity:.75}
+.kpi.on .val{color:var(--navy)}
 .kpi .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;opacity:.85;font-weight:600}
 .kpi .val{font-size:24px;font-weight:800;margin-top:3px}
 .kpi .sub{font-size:11px;opacity:.8;margin-top:2px}
@@ -254,6 +260,7 @@ const selMonths=new Set(); // meses puntuales; si está vacío se usa el rango m
 function inScope(i){ return selMonths.size ? selMonths.has(i) : (i>=mFrom&&i<=mTo); }
 function scopeMonths(){ if(selMonths.size) return [...selMonths].sort((a,b)=>a-b); const o=[];for(let i=mFrom;i<=mTo;i++)o.push(i);return o; }
 let view='mensual';
+let stageFilter=''; // '', 'mql','sql','coti','venta' — drill-down por etapa del embudo (KPIs clickeables)
 const fmtMonth = ym => {const y=ym.slice(0,4),m=+ym.slice(4);return ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m-1]+' '+y.slice(2);};
 const pct = (n,d)=> d>0 ? (100*n/d) : 0;
 const fmtPct = v => v.toFixed(1)+'%';
@@ -263,6 +270,7 @@ const fmtMoney = v => '$'+Math.round(v).toLocaleString('es-AR');
 function passFilters(r){
   for(const k of DIMKEYS){ if(sel[k].size && !sel[k].has(r[F[k]])) return false; }
   if(!inScope(r[F.ym])) return false;
+  if(stageFilter && !r[F[stageFilter]]) return false;
   return true;
 }
 // aggregate base metrics over a filtered set, grouped by a key function
@@ -350,15 +358,31 @@ function buildPanelControls(){
 // ---------- KPIs ----------
 function buildKpis(recs){
   const a=agg(recs),r=ratios(a);
+  const ticket=a.venta?a.mGan/a.venta:0;
+  const periodo=selMonths.size?`${selMonths.size} mes(es)`:(MONTHS.length?`${fmtMonth(MONTHS[mFrom])} – ${fmtMonth(MONTHS[mTo])}`:'');
   const cards=[
-    ['Leads',fmtN(a.leads),selMonths.size?`${selMonths.size} mes(es) elegidos`:(MONTHS.length?`${fmtMonth(MONTHS[mFrom])} – ${fmtMonth(MONTHS[mTo])}`:'')],
-    ['MQL',fmtN(a.mql),fmtPct(pct(a.mql,a.leads))+' de leads'],
-    ['SQL (calls)',fmtN(a.sql),fmtPct(r.r_call_lead)+' de leads (Call/Lead)'],
-    ['Cotizaciones',fmtN(a.coti),fmtPct(r.r_coti_sql)+' de SQL'],
-    ['Ventas',fmtN(a.venta),fmtPct(r.r_venta_call)+' de calls (Vta/Call)'],
-    ['Monto ganado',fmtMoney(a.mGan),a.venta?('Ticket '+fmtMoney(a.mGan/a.venta)):'']
+    {l:'Leads',v:fmtN(a.leads),s:stageFilter?'↺ ver todo':periodo,st:'__all'},
+    {l:'MQL',v:fmtN(a.mql),s:fmtPct(pct(a.mql,a.leads))+' de leads',st:'mql'},
+    {l:'Calls (SQL)',v:fmtN(a.sql),s:fmtPct(r.r_call_lead)+' de leads',st:'sql'},
+    {l:'Cotizaciones',v:fmtN(a.coti),s:fmtPct(r.r_coti_sql)+' de calls',st:'coti'},
+    {l:'Ventas',v:fmtN(a.venta),s:fmtPct(r.r_venta_call)+' de calls',st:'venta'},
+    {l:'Tasa MQL',v:fmtPct(pct(a.mql,a.leads)),s:'MQL / Leads'},
+    {l:'Call/Lead',v:fmtPct(r.r_call_lead),s:'Calls / Leads'},
+    {l:'SQL/MQL',v:fmtPct(r.r_sql_mql),s:'Calls / MQL'},
+    {l:'Coti/SQL',v:fmtPct(r.r_coti_sql),s:'Cotiz. / Calls'},
+    {l:'Vta/Call',v:fmtPct(r.r_venta_call),s:'Ventas / Calls'},
+    {l:'Vta/MQL',v:fmtPct(r.r_venta_mql),s:'Ventas / MQL'},
+    {l:'Vta/Lead',v:fmtPct(pct(a.venta,a.leads)),s:'Conversión global'},
+    {l:'Ticket prom.',v:a.venta?fmtMoney(ticket):'—',s:'Monto / Ventas'},
+    {l:'Monto ganado',v:fmtMoney(a.mGan),s:'USD (limpio)'},
+    {l:'Monto cotizado',v:fmtMoney(a.mCoti),s:'mezcla monedas (ref.)'}
   ];
-  document.getElementById('kpis').innerHTML=cards.map(c=>`<div class="kpi"><div class="lbl">${c[0]}</div><div class="val">${c[1]}</div><div class="sub">${c[2]}</div></div>`).join('');
+  document.getElementById('kpis').innerHTML=cards.map(c=>{
+    const isStage=(c.st!==undefined);
+    const active=isStage&&((c.st==='__all'&&!stageFilter)||(c.st===stageFilter));
+    return `<div class="kpi${isStage?' click':''}${active?' on':''}"${isStage?` data-st="${c.st}"`:''}><div class="lbl">${c.l}</div><div class="val">${c.v}</div><div class="sub">${c.s}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#kpis .kpi.click').forEach(el=>el.onclick=()=>{const s=el.dataset.st;stageFilter=(s==='__all')?'':(stageFilter===s?'':s);render();});
 }
 
 // ---------- MENSUAL TABLE ----------
@@ -758,7 +782,7 @@ document.querySelectorAll('.tab').forEach(tb=>tb.onclick=()=>{
   document.getElementById('view-analisis').style.display=view==='analisis'?'':'none';
   render();
 });
-document.getElementById('resetbtn').onclick=()=>{DIMKEYS.forEach(k=>sel[k].clear());selMonths.clear();mFrom=0;mTo=MONTHS.length-1;document.getElementById('mfrom').value=0;document.getElementById('mto').value=MONTHS.length-1;render();};
+document.getElementById('resetbtn').onclick=()=>{DIMKEYS.forEach(k=>sel[k].clear());selMonths.clear();stageFilter='';mFrom=0;mTo=MONTHS.length-1;document.getElementById('mfrom').value=0;document.getElementById('mto').value=MONTHS.length-1;render();};
 document.getElementById('dimsel').onchange=render;
 document.getElementById('metricsel').onchange=render;
 document.getElementById('grpsel').onchange=render;
@@ -777,7 +801,7 @@ function wireToggle(btnId, bodyId, label){
 }
 wireToggle('togFilters','filtersBody','Ocultar filtros');
 wireToggle('togFiltersA','filtersBodyA','Ocultar');
-const rb2=document.getElementById('resetbtnA'); if(rb2) rb2.onclick=()=>{DIMKEYS.forEach(k=>sel[k].clear());selMonths.clear();render();};
+const rb2=document.getElementById('resetbtnA'); if(rb2) rb2.onclick=()=>{DIMKEYS.forEach(k=>sel[k].clear());selMonths.clear();stageFilter='';render();};
 const cm2=document.getElementById('clrMonthsA'); if(cm2) cm2.onclick=()=>{selMonths.clear();render();};
 initMonths();render();
 </script>
