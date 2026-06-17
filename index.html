@@ -164,9 +164,10 @@ tr.total td:first-child{background:#eaf2fa}
           <option value="sql">SQL</option>
           <option value="coti">Cotizaciones</option>
           <option value="venta">Ventas</option>
+          <option value="r_call_lead">Call/Lead %</option>
           <option value="r_sql_mql">SQL/MQL %</option>
           <option value="r_coti_sql">Coti/SQL %</option>
-          <option value="r_venta_sql">Ventas/SQL %</option>
+          <option value="r_venta_sql">Ventas/Call %</option>
           <option value="r_venta_mql">Ventas/MQL %</option>
         </select></label>
       </div>
@@ -210,8 +211,9 @@ function agg(records){
     {leads:0,mql:0,sql:0,coti:0,venta:0,mGan:0,mCoti:0});
 }
 function ratios(a){return{
+  r_call_lead:pct(a.sql,a.leads),
   r_sql_mql:pct(a.sql,a.mql), r_coti_sql:pct(a.coti,a.sql),
-  r_venta_sql:pct(a.venta,a.sql), r_venta_mql:pct(a.venta,a.mql)};}
+  r_venta_sql:pct(a.venta,a.sql), r_venta_call:pct(a.venta,a.sql), r_venta_mql:pct(a.venta,a.mql)};}
 
 let charts={};
 function destroy(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
@@ -279,9 +281,9 @@ function buildKpis(recs){
   const cards=[
     ['Leads',fmtN(a.leads),selMonths.size?`${selMonths.size} mes(es) elegidos`:(MONTHS.length?`${fmtMonth(MONTHS[mFrom])} – ${fmtMonth(MONTHS[mTo])}`:'')],
     ['MQL',fmtN(a.mql),fmtPct(pct(a.mql,a.leads))+' de leads'],
-    ['SQL',fmtN(a.sql),fmtPct(r.r_sql_mql)+' de MQL'],
+    ['SQL (calls)',fmtN(a.sql),fmtPct(r.r_call_lead)+' de leads (Call/Lead)'],
     ['Cotizaciones',fmtN(a.coti),fmtPct(r.r_coti_sql)+' de SQL'],
-    ['Ventas',fmtN(a.venta),fmtPct(r.r_venta_sql)+' de SQL'],
+    ['Ventas',fmtN(a.venta),fmtPct(r.r_venta_call)+' de calls (Vta/Call)'],
     ['Monto ganado',fmtMoney(a.mGan),a.venta?('Ticket '+fmtMoney(a.mGan/a.venta)):'']
   ];
   document.getElementById('kpis').innerHTML=cards.map(c=>`<div class="kpi"><div class="lbl">${c[0]}</div><div class="val">${c[1]}</div><div class="sub">${c[2]}</div></div>`).join('');
@@ -314,13 +316,14 @@ function buildMTable(recs){
     rows=Object.entries(groups).map(([vi,rs])=>{const a=agg(rs);return{name:DIMS[grp][vi],a,r:ratios(a)};});
     rows.sort((x,y)=>y.a.leads-x.a.leads);
   }
-  const maxR={r_sql_mql:0,r_coti_sql:0,r_venta_sql:0,r_venta_mql:0};
+  const maxR={r_call_lead:0,r_sql_mql:0,r_coti_sql:0,r_venta_sql:0,r_venta_mql:0};
   rows.forEach(d=>{for(const k in maxR)maxR[k]=Math.max(maxR[k],d.r[k]);});
   let html=`<thead><tr><th>${firstHead}</th><th>Leads</th><th>MQL</th><th>SQL</th><th>Coti</th><th>Venta</th>
-    <th>SQL/MQL</th><th>Coti/SQL</th><th>Vta/SQL</th><th>Vta/MQL</th><th>Monto ganado</th></tr></thead><tbody>`;
+    <th>Call/Lead</th><th>SQL/MQL</th><th>Coti/SQL</th><th>Vta/Call</th><th>Vta/MQL</th><th>Monto ganado</th></tr></thead><tbody>`;
   rows.forEach(d=>{
     html+=`<tr><td>${d.name}</td><td>${fmtN(d.a.leads)}</td><td>${fmtN(d.a.mql)}</td>
       <td>${fmtN(d.a.sql)}</td><td>${fmtN(d.a.coti)}</td><td>${fmtN(d.a.venta)}</td>
+      <td><span class="heat" style="${heatColor(d.r.r_call_lead,maxR.r_call_lead)}">${fmtPct(d.r.r_call_lead)}</span></td>
       <td><span class="heat" style="${heatColor(d.r.r_sql_mql,maxR.r_sql_mql)}">${fmtPct(d.r.r_sql_mql)}</span></td>
       <td><span class="heat" style="${heatColor(d.r.r_coti_sql,maxR.r_coti_sql)}">${fmtPct(d.r.r_coti_sql)}</span></td>
       <td><span class="heat" style="${heatColor(d.r.r_venta_sql,maxR.r_venta_sql)}">${fmtPct(d.r.r_venta_sql)}</span></td>
@@ -329,7 +332,7 @@ function buildMTable(recs){
   });
   const tr=ratios(tot);
   html+=`<tr class="total"><td>TOTAL</td><td>${fmtN(tot.leads)}</td><td>${fmtN(tot.mql)}</td><td>${fmtN(tot.sql)}</td>
-    <td>${fmtN(tot.coti)}</td><td>${fmtN(tot.venta)}</td><td>${fmtPct(tr.r_sql_mql)}</td><td>${fmtPct(tr.r_coti_sql)}</td>
+    <td>${fmtN(tot.coti)}</td><td>${fmtN(tot.venta)}</td><td>${fmtPct(tr.r_call_lead)}</td><td>${fmtPct(tr.r_sql_mql)}</td><td>${fmtPct(tr.r_coti_sql)}</td>
     <td>${fmtPct(tr.r_venta_sql)}</td><td>${fmtPct(tr.r_venta_mql)}</td><td>${fmtMoney(tot.mGan)}</td></tr></tbody>`;
   document.getElementById('mtable').innerHTML=html;
   return monthSeries(recs);
@@ -405,10 +408,10 @@ function buildDim(recs){
       scales:{x:{beginAtZero:true,ticks:{callback:v=>isPct?v+'%':v}}}}});
   // table
   let html=`<thead><tr><th>${DIMLABEL[k]}</th><th>Leads</th><th>MQL</th><th>SQL</th><th>Coti</th><th>Venta</th>
-    <th>SQL/MQL</th><th>Coti/SQL</th><th>Vta/SQL</th><th>Vta/MQL</th><th>Monto ganado</th></tr></thead><tbody>`;
+    <th>Call/Lead</th><th>SQL/MQL</th><th>Coti/SQL</th><th>Vta/Call</th><th>Vta/MQL</th><th>Ticket</th><th>Monto ganado</th></tr></thead><tbody>`;
   rows.forEach(d=>{html+=`<tr><td>${d.name}</td><td>${fmtN(d.a.leads)}</td><td>${fmtN(d.a.mql)}</td><td>${fmtN(d.a.sql)}</td>
-    <td>${fmtN(d.a.coti)}</td><td>${fmtN(d.a.venta)}</td><td>${fmtPct(d.r.r_sql_mql)}</td><td>${fmtPct(d.r.r_coti_sql)}</td>
-    <td>${fmtPct(d.r.r_venta_sql)}</td><td>${fmtPct(d.r.r_venta_mql)}</td><td>${fmtMoney(d.a.mGan)}</td></tr>`;});
+    <td>${fmtN(d.a.coti)}</td><td>${fmtN(d.a.venta)}</td><td>${fmtPct(d.r.r_call_lead)}</td><td>${fmtPct(d.r.r_sql_mql)}</td><td>${fmtPct(d.r.r_coti_sql)}</td>
+    <td>${fmtPct(d.r.r_venta_sql)}</td><td>${fmtPct(d.r.r_venta_mql)}</td><td>${d.a.venta?fmtMoney(d.a.mGan/d.a.venta):'—'}</td><td>${fmtMoney(d.a.mGan)}</td></tr>`;});
   html+='</tbody>';document.getElementById('dtable').innerHTML=html;
 }
 
